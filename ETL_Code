@@ -1,0 +1,110 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Load dataset
+file_path = r'C:\Users\Lenovo\Downloads\dummy_data_usage_large.xlsx'
+df = pd.read_excel(file_path)
+
+# Constants
+exchange_rate = 2500  # CDF to USD
+
+# Preprocessing
+df['eventTime'] = pd.to_datetime(df['eventTime'])
+df['date'] = df['eventTime'].dt.date
+df['hour'] = df['eventTime'].dt.hour
+df['ChargedUSD'] = df['daChargedAmount'] / exchange_rate
+
+# -------------------- 1. Daily Summary --------------------
+daily_summary = df.groupby('date').agg(
+    total_users=('servedMSISDN', 'nunique'),
+    total_usage_bytes=('totalUsage', 'sum'),
+    total_revenue_usd=('ChargedUSD', 'sum')
+).reset_index()
+daily_summary['total_usage_GB'] = daily_summary['total_usage_bytes'] / (1024 ** 3)
+
+# Daily Usage Chart
+plt.figure(figsize=(10, 5))
+sns.lineplot(data=daily_summary, x='date', y='total_usage_GB', marker='o')
+plt.title('Daily Data Usage (GB)')
+plt.xlabel('Date')
+plt.ylabel('Total Usage (GB)')
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+# Insight
+max_day = daily_summary.loc[daily_summary['total_usage_GB'].idxmax()]
+print(f"📅 Highest daily data usage: {max_day['total_usage_GB']:.2f} GB on {max_day['date']}")
+
+# Daily Revenue Chart
+plt.figure(figsize=(10, 5))
+sns.lineplot(data=daily_summary, x='date', y='total_revenue_usd', marker='o', color='green')
+plt.title('Daily Revenue (USD)')
+plt.xlabel('Date')
+plt.ylabel('Revenue (USD)')
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+# Insight
+max_rev = daily_summary.loc[daily_summary['total_revenue_usd'].idxmax()]
+print(f"💰 Highest daily revenue: ${max_rev['total_revenue_usd']:.2f} on {max_rev['date']}")
+
+# -------------------- 2. Top Revenue Contributors --------------------
+top_5 = df.groupby('servedMSISDN')['ChargedUSD'].sum().nlargest(5).reset_index()
+
+plt.figure(figsize=(6, 6))
+plt.pie(top_5['ChargedUSD'], labels=top_5['servedMSISDN'], autopct='%1.1f%%', startangle=140)
+plt.title('Top 5 MSISDNs by Revenue Contribution')
+plt.axis('equal')
+plt.show()
+
+# Insight
+print(f"🏆 Top contributor: MSISDN {top_5.iloc[0]['servedMSISDN']} with ${top_5.iloc[0]['ChargedUSD']:.2f}")
+
+# -------------------- 3. Revenue Loss Detection --------------------
+uncharged = df[df['daChargedAmount'] == 0]
+if not uncharged.empty:
+    daily_loss = uncharged.groupby('date').agg(
+        uncharged_usage_bytes=('totalUsage', 'sum'),
+        affected_users=('servedMSISDN', 'nunique')
+    ).reset_index()
+    daily_loss['uncharged_usage_GB'] = daily_loss['uncharged_usage_bytes'] / (1024 ** 3)
+
+    plt.figure(figsize=(10, 5))
+    sns.barplot(data=daily_loss, x='date', y='uncharged_usage_GB', palette='Blues')
+    plt.title('Uncharged Data Usage (GB) Per Day')
+    plt.xlabel('Date')
+    plt.ylabel('Uncharged Usage (GB)')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+    high_loss = daily_loss.loc[daily_loss['uncharged_usage_GB'].idxmax()]
+    print(f"⚠️ Highest uncharged usage: {high_loss['uncharged_usage_GB']:.2f} GB on {high_loss['date']} "
+          f"affecting {high_loss['affected_users']} users.")
+else:
+    print("✅ No uncharged usage detected — great!")
+
+# -------------------- 4. Hourly Usage Patterns --------------------
+hourly_total = df.groupby('hour').agg(total_usage_bytes=('totalUsage', 'sum')).reset_index()
+hourly_total['total_usage_MB'] = hourly_total['total_usage_bytes'] / (1024 ** 2)
+
+max_hour = hourly_total.loc[hourly_total['total_usage_MB'].idxmax()]
+min_hour = hourly_total.loc[hourly_total['total_usage_MB'].idxmin()]
+
+plt.figure(figsize=(12, 6))
+sns.barplot(data=hourly_total, x='hour', y='total_usage_MB', palette='viridis')
+plt.axvline(x=max_hour['hour'], color='red', linestyle='--', label='Peak Hour')
+plt.axvline(x=min_hour['hour'], color='blue', linestyle='--', label='Lowest Hour')
+plt.title('Hourly Data Usage (MB)')
+plt.xlabel('Hour of Day')
+plt.ylabel('Total Usage (MB)')
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+# Insight
+print(f"📈 Peak usage hour: {int(max_hour['hour'])}:00 with {max_hour['total_usage_MB']/1024:.2f} GB")
+print(f"📉 Lowest usage hour: {int(min_hour['hour'])}:00 with {min_hour['total_usage_MB']/1024:.2f} GB")
