@@ -108,3 +108,52 @@ plt.show()
 # Insight
 print(f"📈 Peak usage hour: {int(max_hour['hour'])}:00 with {max_hour['total_usage_MB']/1024:.2f} GB")
 print(f"📉 Lowest usage hour: {int(min_hour['hour'])}:00 with {min_hour['total_usage_MB']/1024:.2f} GB")
+
+# -------------------- 5. User Segmentation by Usage Tiers --------------------
+
+# Step 1: Calculate total usage per user (in GB)
+user_usage = df.groupby('servedMSISDN')['totalUsage'].sum().reset_index()
+user_usage['usage_GB'] = user_usage['totalUsage'] / (1024 ** 3)
+
+# Step 2: Define segmentation rules (based on your updated thresholds)
+def segment_user(usage_gb):
+    if usage_gb > 3:
+        return 'Heavy User'
+    elif usage_gb >= 1:
+        return 'Moderate User'
+    else:
+        return 'Light User'
+
+user_usage['User Segment'] = user_usage['usage_GB'].apply(segment_user)
+
+# Step 3: Count users in each segment
+segment_counts = user_usage['User Segment'].value_counts().reset_index()
+segment_counts.columns = ['User Segment', 'Number of Users']
+
+# Step 4: Sort the segments for consistent order
+segment_counts['User Segment'] = pd.Categorical(
+    segment_counts['User Segment'],
+    categories=['Light User', 'Moderate User', 'Heavy User'],
+    ordered=True
+)
+segment_counts = segment_counts.sort_values('User Segment')
+
+# Step 5: Plot the segmentation results
+plt.figure(figsize=(7, 5))
+sns.barplot(data=segment_counts, x='User Segment', y='Number of Users', palette='Set2')
+plt.title('User Segmentation Based on Data Usage')
+plt.xlabel('Segment')
+plt.ylabel('Number of Users')
+plt.tight_layout()
+plt.show()
+
+# Step 6: Display clear messages for non-technical users
+print("\n📊 User Segmentation Summary:")
+for _, row in segment_counts.iterrows():
+    print(f"➡️ {row['Number of Users']} users fall into the '{row['User Segment']}' category.")
+
+print("\n✅ Segmentation helps in understanding customer behavior:")
+print("- 'Heavy Users' (above 3 GB) are likely power users or business accounts.")
+print("- 'Moderate Users' (1–3 GB) are regular data consumers.")
+print("- 'Light Users' (below 1 GB) may need engagement to increase data usage.")
+
